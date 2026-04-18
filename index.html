@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no" />
+  <title>Simple Maze Game</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <main class="app">
+    <h1>Maze Game</h1>
+    <p class="hint">Use arrow keys, WASD, or swipe to move to the exit.</p>
+
+    <canvas id="maze" width="600" height="600" aria-label="Maze game board"></canvas>
+
+    <section class="controls">
+      <button id="newGameBtn" type="button">New Maze</button>
+      <label for="sizeSelect">Size</label>
+      <select id="sizeSelect">
+        <option value="10">10x10</option>
+        <option value="15" selected>15x15</option>
+        <option value="20">20x20</option>
+        <option value="25">25x25</option>
+        <option value="30">30x30</option>
+        <option value="35">35x35</option>
+        <option value="40">40x40</option>
+        <option value="45">45x45</option>
+        <option value="50">50x50</option>
+        <option value="60">60x60</option>
+        <option value="70">70x70</option>
+        <option value="80">80x80</option>
+        <option value="90">90x90</option>
+        <option value="100">100x100</option>
+      </select>
+      <label for="colorSelect">Ball</label>
+      <select id="colorSelect">
+        <option value="#ff3b3b" selected>Laser Red</option>
+        <option value="#ffea00">Neon Yellow</option>
+        <option value="#39ff14">Electric Lime</option>
+        <option value="#00f5ff">Cyber Cyan</option>
+        <option value="#ff00ff">Hot Magenta</option>
+        <option value="#ff8c00">Plasma Orange</option>
+      </select>
+    </section>
+
+    <p id="score" class="score" aria-live="polite">Points: 0</p>
+    <p id="status" class="status" role="status" aria-live="polite">Reach the exit!</p>
+    <div id="winOverlay" class="win-overlay" aria-hidden="true">
+      <div id="winPopup" class="win-popup" role="alert" aria-live="assertive">YOU WON!!</div>
+    </div>
+    <div id="trollOverlay" class="troll-overlay" aria-hidden="true">
+      <div id="trollPopup" class="troll-popup" role="alert" aria-live="assertive">�</div>
+    </div>
+  </main>
+
+  <script src="game.js"></script>
+</body>
+</html>
