@@ -6,6 +6,8 @@ const winPopupEl = document.getElementById("winPopup");
 const winOverlayEl = document.getElementById("winOverlay");
 const trollPopupEl = document.getElementById("trollPopup");
 const trollOverlayEl = document.getElementById("trollOverlay");
+const progressBarEl = document.getElementById("progressBar");
+const progressPercentEl = document.getElementById("progressPercent");
 const newGameBtn = document.getElementById("newGameBtn");
 const sizeSelect = document.getElementById("sizeSelect");
 const colorSelect = document.getElementById("colorSelect");
@@ -41,6 +43,10 @@ let trollAmbientNodes = null;
 let trollPulseIntervalId = null;
 let trollPopupTimeoutId = null;
 let trollIdlePopupTimeoutId = null;
+let distancesFromStart = [];
+let distanceToExit = Infinity;
+let maxDistanceToExit = Infinity;
+let playerMaxProgress = Infinity;
 
 function makeCell() {
   return {
@@ -520,7 +526,10 @@ function setupPathChallenges() {
   const path = findPath({ x: 0, y: 0 }, { x: exit.x, y: exit.y });
   if (path.length < 4) return;
 
-  const distancesFromStart = buildDistanceMap({ x: 0, y: 0 });
+  distancesFromStart = buildDistanceMap({ x: 0, y: 0 });
+  maxDistanceToExit = distancesFromStart[exit.y][exit.x];
+  distanceToExit = maxDistanceToExit;
+  playerMaxProgress = maxDistanceToExit;
 
   const enemyIndices = buildEnemyCheckpoints(path.length);
   let previousEnemyDistance = 0;
@@ -591,6 +600,21 @@ function removeEnemyAt(x, y) {
 
 function updateScoreLabel() {
   scoreEl.textContent = `Points: ${playerPoints}`;
+}
+
+function updateProgressBar() {
+  if (!Number.isFinite(distanceToExit) || !Number.isFinite(maxDistanceToExit)) {
+    progressBarEl.style.width = "0%";
+    progressPercentEl.textContent = "0";
+    return;
+  }
+
+  const progress = Math.max(0, 1 - (distanceToExit / maxDistanceToExit));
+  const progressPercent = Math.round(progress * 100);
+  
+  progressBarEl.style.width = `${progressPercent}%`;
+  progressPercentEl.textContent = progressPercent;
+  progressBarEl.setAttribute("aria-valuenow", progressPercent);
 }
 
 function showWinPopup() {
@@ -919,6 +943,11 @@ function tryMove(dx, dy) {
   player.x = nx;
   player.y = ny;
 
+  // Update distance to exit for progress bar
+  if (Number.isFinite(distancesFromStart[player.y][player.x])) {
+    distanceToExit = distancesFromStart[player.y][player.x];
+  }
+
   const gained = collectPointAt(player.x, player.y);
   if (gained > 0) {
     playerPoints += gained;
@@ -940,6 +969,7 @@ function tryMove(dx, dy) {
     }
   }
 
+  updateProgressBar();
   animatePlayerMove(start, { x: nx, y: ny });
 }
 
@@ -1135,6 +1165,7 @@ function startNewGame(message = "Reach the exit!") {
   initMaze();
   pickExit();
   setupPathChallenges();
+  updateProgressBar();
   drawMaze();
 
   if (isTrollLevel) {
