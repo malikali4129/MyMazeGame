@@ -7,6 +7,48 @@
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
+  <div id="homeMenu" class="home-menu" role="dialog" aria-labelledby="homeTitle" aria-hidden="false">
+    <div class="home-popup">
+      <h1 id="homeTitle">Welcome To Neon Maze</h1>
+      <p class="home-subtitle">Choose Your Difficulty</p>
+      <div class="difficulty-grid">
+        <button id="easyBtn" class="difficulty-btn" data-difficulty="easy">
+          <div class="difficulty-icon">⚡</div>
+          <div class="difficulty-name">Easy</div>
+          <div class="difficulty-desc">Simple gameplay, collect coins</div>
+        </button>
+        <button id="hardBtn" class="difficulty-btn" data-difficulty="hard">
+          <div class="difficulty-icon">🔥</div>
+          <div class="difficulty-name">Hard</div>
+          <div class="difficulty-desc">No moving backward</div>
+        </button>
+        <button id="impossibleBtn" class="difficulty-btn" data-difficulty="impossible">
+          <div class="difficulty-icon">💀</div>
+          <div class="difficulty-name">Impossible</div>
+          <div class="difficulty-desc">Limited steps + no going back</div>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div id="welcomeOverlay" class="welcome-overlay hidden" role="dialog" aria-labelledby="welcomeTitle" aria-hidden="true">
+    <div class="welcome-popup">
+      <h2 id="welcomeTitle">How to Play</h2>
+      <div class="welcome-content">
+        <ul>
+          <li><strong>Move:</strong> Use arrow keys, WASD, or swipe</li>
+          <li><strong>Goal:</strong> Reach the exit (bottom-right corner)</li>
+          <li><strong>Collect:</strong> Gather 🪙 coins for points</li>
+          <li><strong>Avoid:</strong> Enemies require enough points to pass</li>
+          <li><strong>Troll Level:</strong> Try 25x25 for a spooky challenge!</li>
+        </ul>
+        <p style="font-size: 0.95rem; margin-top: 1.5rem; color: #7ba8d1;">
+          <strong>Press "New Maze" to start</strong>
+        </p>
+      </div>
+    </div>
+  </div>
+
   <main class="app">
     <h1>Maze Game</h1>
     <p class="hint">Use arrow keys, WASD, or swipe to move to the exit.</p>
@@ -15,6 +57,7 @@
 
     <section class="controls">
       <button id="newGameBtn" type="button">New Maze</button>
+      <button id="themeBtn" type="button" title="Open theme menu">🎨 Themes</button>
       <label for="sizeSelect">Size</label>
       <select id="sizeSelect">
         <option value="10">10x10</option>
@@ -32,33 +75,75 @@
         <option value="90">90x90</option>
         <option value="100">100x100</option>
       </select>
-      <label for="colorSelect">Ball</label>
-      <select id="colorSelect">
-        <option value="#ff3b3b" selected>Laser Red</option>
-        <option value="#ffea00">Neon Yellow</option>
-        <option value="#39ff14">Electric Lime</option>
-        <option value="#00f5ff">Cyber Cyan</option>
-        <option value="#ff00ff">Hot Magenta</option>
-        <option value="#ff8c00">Plasma Orange</option>
-      </select>
     </section>
 
-    <div class="progress-container">
-      <div class="progress-bar-wrapper">
-        <div id="progressBar" class="progress-bar" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
-      </div>
-      <p class="progress-label"><span id="progressPercent">0</span>% Progress</p>
+    <div class="stats-container">
+      <p id="score" class="score" aria-live="polite">Points: 0</p>
+      <p id="steps" class="steps hidden" aria-live="polite">Steps: 0</p>
     </div>
-
-    <p id="score" class="score" aria-live="polite">Points: 0</p>
     <p id="status" class="status" role="status" aria-live="polite">Reach the exit!</p>
+    <p class="credits" aria-label="Project credits">Made with 💖 by Abdul Hannan</p>
     <div id="winOverlay" class="win-overlay" aria-hidden="true">
       <div id="winPopup" class="win-popup" role="alert" aria-live="assertive">YOU WON!!</div>
     </div>
     <div id="trollOverlay" class="troll-overlay" aria-hidden="true">
       <div id="trollPopup" class="troll-popup" role="alert" aria-live="assertive">�</div>
     </div>
-  </main>
+    <div id="themeModal" class="theme-modal hidden" role="dialog" aria-labelledby="themeModalTitle" aria-hidden="true">
+      <div class="theme-modal-overlay"></div>
+      <div class="theme-modal-content">
+        <div class="theme-modal-header">
+          <h2 id="themeModalTitle">Choose a Theme</h2>
+          <button class="theme-modal-close" aria-label="Close theme menu">&times;</button>
+        </div>
+        <div class="theme-grid">
+          <button class="theme-btn" data-theme="laser-red" title="Laser Red" aria-label="Laser Red theme">
+            <div class="theme-swatch" style="background: linear-gradient(135deg, #ff3b3b, #ff6b6b);"></div>
+            <span class="theme-label">Laser Red</span>
+          </button>
+          <button class="theme-btn" data-theme="neon-yellow" title="Neon Yellow" aria-label="Neon Yellow theme">
+            <div class="theme-swatch" style="background: linear-gradient(135deg, #ffeb3b, #ffd600);"></div>
+            <span class="theme-label">Neon Yellow</span>
+          </button>
+          <button class="theme-btn" data-theme="electric-lime" title="Electric Lime" aria-label="Electric Lime theme">
+            <div class="theme-swatch" style="background: linear-gradient(135deg, #76ff03, #39ff14);"></div>
+            <span class="theme-label">Electric Lime</span>
+          </button>
+          <button class="theme-btn" data-theme="cyber-cyan" title="Cyber Cyan" aria-label="Cyber Cyan theme">
+            <div class="theme-swatch" style="background: linear-gradient(135deg, #00d4ff, #00e5ff);"></div>
+            <span class="theme-label">Cyber Cyan</span>
+          </button>
+          <button class="theme-btn" data-theme="hot-magenta" title="Hot Magenta" aria-label="Hot Magenta theme">
+            <div class="theme-swatch" style="background: linear-gradient(135deg, #ff0080, #ff1493);"></div>
+            <span class="theme-label">Hot Magenta</span>
+          </button>
+          <button class="theme-btn" data-theme="plasma-orange" title="Plasma Orange" aria-label="Plasma Orange theme">
+            <div class="theme-swatch" style="background: linear-gradient(135deg, #ffa500, #ff6347);"></div>
+            <span class="theme-label">Plasma Orange</span>
+          </button>
+          <button class="theme-btn" data-theme="toxic-green" title="Toxic Green" aria-label="Toxic Green theme">
+            <div class="theme-swatch" style="background: linear-gradient(135deg, #00ff00, #00ff41);"></div>
+            <span class="theme-label">Toxic Green</span>
+          </button>
+          <button class="theme-btn" data-theme="arctic-ice" title="Arctic Ice" aria-label="Arctic Ice theme">
+            <div class="theme-swatch" style="background: linear-gradient(135deg, #00ffff, #0ff0ff);"></div>
+            <span class="theme-label">Arctic Ice</span>
+          </button>
+          <button class="theme-btn" data-theme="sunset-fire" title="Sunset Fire" aria-label="Sunset Fire theme">
+            <div class="theme-swatch" style="background: linear-gradient(135deg, #ff7f50, #ff4500);"></div>
+            <span class="theme-label">Sunset Fire</span>
+          </button>
+          <button class="theme-btn" data-theme="deep-purple" title="Deep Purple" aria-label="Deep Purple theme">
+            <div class="theme-swatch" style="background: linear-gradient(135deg, #bb86fc, #9d4edd);"></div>
+            <span class="theme-label">Deep Purple</span>
+          </button>
+          <button class="theme-btn" data-theme="rainbow" title="Rainbow Mode" aria-label="Rainbow Mode theme">
+            <div class="theme-swatch" style="background: linear-gradient(90deg, #ff0000, #ffff00, #00ff00, #00ffff, #0000ff, #ff00ff);"></div>
+            <span class="theme-label">🌈 Rainbow</span>
+          </button>
+        </div>
+      </div>
+    </div>  </main>
 
   <script src="game.js"></script>
 </body>

@@ -2,16 +2,29 @@ const canvas = document.getElementById("maze");
 const ctx = canvas.getContext("2d");
 const statusEl = document.getElementById("status");
 const scoreEl = document.getElementById("score");
+const stepsEl = document.getElementById("steps");
 const winPopupEl = document.getElementById("winPopup");
 const winOverlayEl = document.getElementById("winOverlay");
 const trollPopupEl = document.getElementById("trollPopup");
 const trollOverlayEl = document.getElementById("trollOverlay");
-const progressBarEl = document.getElementById("progressBar");
-const progressPercentEl = document.getElementById("progressPercent");
+const homeMenu = document.getElementById("homeMenu");
+const welcomeOverlayEl = document.getElementById("welcomeOverlay");
+const easyBtn = document.getElementById("easyBtn");
+const hardBtn = document.getElementById("hardBtn");
+const impossibleBtn = document.getElementById("impossibleBtn");
 const newGameBtn = document.getElementById("newGameBtn");
+const themeBtn = document.getElementById("themeBtn");
+const themeModal = document.getElementById("themeModal");
+const themeModalClose = document.querySelector(".theme-modal-close");
+const themeModalOverlay = document.querySelector(".theme-modal-overlay");
 const sizeSelect = document.getElementById("sizeSelect");
-const colorSelect = document.getElementById("colorSelect");
+const themeBtns = document.querySelectorAll(".theme-btn");
 
+let currentTheme = "arctic-ice";
+let difficulty = "easy"; // "easy", "hard", or "impossible"
+let stepCount = 0;
+let optimalPathLength = 0;
+let lastPlayerPosition = { x: 0, y: 0 };
 let gridSize = Number(sizeSelect.value);
 let cellSize = canvas.width / gridSize;
 let maze = [];
@@ -47,6 +60,7 @@ let distancesFromStart = [];
 let distanceToExit = Infinity;
 let maxDistanceToExit = Infinity;
 let playerMaxProgress = Infinity;
+let gameStarted = false;
 
 function makeCell() {
   return {
@@ -65,24 +79,48 @@ function initMaze() {
     Array.from({ length: gridSize }, () => makeCell())
   );
 
-  // Iterative DFS maze generation.
-  const stack = [];
-  let current = { x: 0, y: 0 };
+  // Frontier-based generation creates a bushier maze with more short dead ends.
+  const frontier = [];
+  const frontierKeys = new Set();
+
+  function pushFrontier(x, y) {
+    if (x < 0 || x >= gridSize || y < 0 || y >= gridSize) return;
+    const cellKey = keyFor(x, y);
+    if (maze[y][x].visited || frontierKeys.has(cellKey)) return;
+    frontier.push({ x, y });
+    frontierKeys.add(cellKey);
+  }
+
+  function getVisitedNeighbors(x, y) {
+    const neighbors = [];
+    if (y > 0 && maze[y - 1][x].visited) neighbors.push({ x, y: y - 1 });
+    if (x < gridSize - 1 && maze[y][x + 1].visited) neighbors.push({ x: x + 1, y });
+    if (y < gridSize - 1 && maze[y + 1][x].visited) neighbors.push({ x, y: y + 1 });
+    if (x > 0 && maze[y][x - 1].visited) neighbors.push({ x: x - 1, y });
+    return neighbors;
+  }
+
   maze[0][0].visited = true;
+  pushFrontier(1, 0);
+  pushFrontier(0, 1);
 
-  do {
-    const neighbors = getUnvisitedNeighbors(current.x, current.y);
+  while (frontier.length > 0) {
+    const index = Math.floor(Math.random() * frontier.length);
+    const cell = frontier.splice(index, 1)[0];
+    frontierKeys.delete(keyFor(cell.x, cell.y));
 
-    if (neighbors.length > 0) {
-      const next = neighbors[Math.floor(Math.random() * neighbors.length)];
-      removeWalls(current, next);
-      stack.push(current);
-      current = { x: next.x, y: next.y };
-      maze[current.y][current.x].visited = true;
-    } else {
-      current = stack.pop();
-    }
-  } while (stack.length > 0 || getUnvisitedNeighbors(current.x, current.y).length > 0);
+    const neighbors = getVisitedNeighbors(cell.x, cell.y);
+    if (neighbors.length === 0) continue;
+
+    const connectTo = neighbors[Math.floor(Math.random() * neighbors.length)];
+    removeWalls(cell, connectTo);
+    maze[cell.y][cell.x].visited = true;
+
+    pushFrontier(cell.x, cell.y - 1);
+    pushFrontier(cell.x + 1, cell.y);
+    pushFrontier(cell.x, cell.y + 1);
+    pushFrontier(cell.x - 1, cell.y);
+  }
 
   for (const row of maze) {
     for (const cell of row) {
@@ -151,7 +189,7 @@ function drawMaze() {
     }
   }
 
-  drawExit();
+  drawExit(performance.now());
   drawPointOrbs();
   drawEnemies();
   drawTrail(performance.now());
@@ -239,7 +277,8 @@ function drawPointOrbs() {
   for (const orb of pointOrbs) {
     const cx = orb.x * cellSize + cellSize / 2;
     const cy = orb.y * cellSize + cellSize / 2;
-    const coinSize = Math.max(8, cellSize * 0.22);
+    const sizeScale = gridSize >= 80 ? 0.12 : gridSize >= 50 ? 0.16 : 0.22;
+    const coinSize = Math.max(4, cellSize * sizeScale);
 
     ctx.save();
     ctx.textAlign = "center";
@@ -345,7 +384,7 @@ function pruneTrail(now) {
   trail = trail.filter((point) => now - point.createdAt <= trailLifetimeMs);
 }
 
-function drawExit() {
+function drawExit(currentTime = performance.now()) {
   const x = exit.x * cellSize;
   const y = exit.y * cellSize;
   const pad = cellSize * 0.2;
@@ -353,9 +392,16 @@ function drawExit() {
   const cy = y + cellSize / 2;
   const size = cellSize - pad * 2;
   const radius = size * 0.5;
+  const blinkBoost = gridSize >= 60 ? 1.35 : gridSize >= 30 ? 1.15 : 1;
 
   ctx.save();
-  ctx.shadowBlur = cellSize * 0.5;
+  
+  // Create blink effect using sine wave (0.5-1 opacity over 1 second cycle)
+  const blinkPhase = (currentTime % 1000) / 1000;
+  const blinkOpacity = 0.5 + Math.sin(blinkPhase * Math.PI * 2) * 0.5;
+  
+  ctx.globalAlpha = blinkOpacity;
+  ctx.shadowBlur = cellSize * 0.5 * blinkOpacity * blinkBoost;
   ctx.shadowColor = getCssVar("--exit");
   ctx.fillStyle = getCssVar("--exit");
 
@@ -384,21 +430,23 @@ function drawExit() {
   ctx.restore();
 }
 
-function pickExit() {
-  const candidates = [
-    { x: gridSize - 1, y: gridSize - 1 },
-    { x: gridSize - 1, y: 0 },
-    { x: 0, y: gridSize - 1 },
-    { x: Math.floor(gridSize / 2), y: gridSize - 1 },
-    { x: gridSize - 1, y: Math.floor(gridSize / 2) },
-  ];
+function pickExit(distanceMap = null) {
+  const candidates = [];
 
-  const sorted = candidates
-    .filter((c) => !(c.x === 0 && c.y === 0))
-    .sort((a, b) => b.x + b.y - (a.x + a.y));
+  for (let y = 0; y < gridSize; y++) {
+    for (let x = 0; x < gridSize; x++) {
+      if (x !== 0 && y !== 0 && x !== gridSize - 1 && y !== gridSize - 1) continue;
+      if (x === 0 && y === 0) continue;
 
-  const topChoices = sorted.slice(0, Math.min(3, sorted.length));
-  const chosen = topChoices[Math.floor(Math.random() * topChoices.length)];
+      const distance = distanceMap ? distanceMap[y][x] : x + y;
+      if (!Number.isFinite(distance)) continue;
+      candidates.push({ x, y, distance });
+    }
+  }
+
+  const sorted = candidates.sort((a, b) => b.distance - a.distance);
+  const topSlice = sorted.slice(0, Math.max(3, Math.ceil(sorted.length * 0.25)));
+  const chosen = topSlice[Math.floor(Math.random() * topSlice.length)] || sorted[0] || { x: gridSize - 1, y: gridSize - 1 };
   const variant = exitVariants[Math.floor(Math.random() * exitVariants.length)];
   exit = { x: chosen.x, y: chosen.y, variant };
 }
@@ -519,6 +567,41 @@ function cellOrderHash(x, y, segmentIndex) {
   return (((x + 1) * 73856093) ^ ((y + 1) * 19349663) ^ ((segmentIndex + 1) * 83492791)) >>> 0;
 }
 
+function shuffleCells(cells) {
+  const shuffled = cells.slice();
+
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+
+  return shuffled;
+}
+
+function scatterBonusCoins(path) {
+  const occupiedKeys = new Set(pointOrbs.map((orb) => keyFor(orb.x, orb.y)));
+  const allCells = [];
+
+  for (let y = 0; y < gridSize; y++) {
+    for (let x = 0; x < gridSize; x++) {
+      if (isCellBlockedForSpawns(x, y)) continue;
+      allCells.push({ x, y });
+    }
+  }
+
+  if (allCells.length === 0) return;
+
+  const density = gridSize >= 80 ? 0.2 : gridSize >= 50 ? 0.24 : 0.3;
+  const desiredCoins = Math.max(12, Math.floor(allCells.length * density));
+  const scatteredCells = shuffleCells(allCells).filter((cell) => !occupiedKeys.has(keyFor(cell.x, cell.y))).slice(0, desiredCoins);
+
+  for (let i = 0; i < scatteredCells.length; i++) {
+    const cell = scatteredCells[i];
+    const value = i % 11 === 0 ? 4 : i % 7 === 0 ? 3 : (i % 3 === 0 ? 2 : 1);
+    pointOrbs.push({ x: cell.x, y: cell.y, value });
+  }
+}
+
 function setupPathChallenges() {
   pointOrbs = [];
   enemies = [];
@@ -526,7 +609,10 @@ function setupPathChallenges() {
   const path = findPath({ x: 0, y: 0 }, { x: exit.x, y: exit.y });
   if (path.length < 4) return;
 
-  distancesFromStart = buildDistanceMap({ x: 0, y: 0 });
+  const exitDistance = distancesFromStart[exit.y]?.[exit.x];
+  if (!Number.isFinite(exitDistance)) {
+    distancesFromStart = buildDistanceMap({ x: 0, y: 0 });
+  }
   maxDistanceToExit = distancesFromStart[exit.y][exit.x];
   distanceToExit = maxDistanceToExit;
   playerMaxProgress = maxDistanceToExit;
@@ -578,6 +664,8 @@ function setupPathChallenges() {
       previousEnemyDistance = enemyDistance;
     }
   }
+
+  scatterBonusCoins(path);
 }
 
 function collectPointAt(x, y) {
@@ -603,18 +691,111 @@ function updateScoreLabel() {
 }
 
 function updateProgressBar() {
-  if (!Number.isFinite(distanceToExit) || !Number.isFinite(maxDistanceToExit)) {
-    progressBarEl.style.width = "0%";
-    progressPercentEl.textContent = "0";
-    return;
+  // Update step counter for impossible mode
+  if (difficulty === "impossible") {
+    stepsEl.classList.remove("hidden");
+    stepsEl.textContent = `Steps: ${stepCount} / ${Math.max(1, optimalPathLength)}`;
+  } else {
+    stepsEl.classList.add("hidden");
+  }
+}
+
+function calculateOptimalPath() {
+  const path = findPath({ x: 0, y: 0 }, { x: exit.x, y: exit.y });
+  return Math.max(1, path.length - 1);
+}
+
+function canMoveTo(newX, newY) {
+  // Check hard/impossible mode backtracking restriction
+  if (difficulty === "hard" || difficulty === "impossible") {
+    // If we just moved here, we can't immediately move back
+    if (newX === lastPlayerPosition.x && newY === lastPlayerPosition.y) {
+      return false;
+    }
   }
 
-  const progress = Math.max(0, 1 - (distanceToExit / maxDistanceToExit));
-  const progressPercent = Math.round(progress * 100);
+  // Check impossible mode step limit
+  if (difficulty === "impossible" && stepCount >= optimalPathLength) {
+    return false;
+  }
+
+  return true;
+}
+
+function showHomeMenu() {
+  homeMenu.classList.remove("hidden");
+  homeMenu.setAttribute("aria-hidden", "false");
+}
+
+function hideHomeMenu() {
+  homeMenu.classList.add("hidden");
+  homeMenu.setAttribute("aria-hidden", "true");
+}
+
+function startGameWithDifficulty(selectedDifficulty) {
+  difficulty = selectedDifficulty;
+  hideHomeMenu();
+  stepCount = 0;
+  gridSize = Number(sizeSelect.value);
+  isTrollLevel = gridSize === 25;
+  document.body.classList.toggle("troll-mode", isTrollLevel);
+  if (isTrollLevel) {
+    startTrollAmbience();
+  } else {
+    stopTrollAmbience();
+    clearTrollIdlePopupTimer();
+  }
+  cellSize = canvas.width / gridSize;
+  player = { x: 0, y: 0 };
+  renderPlayer = { x: 0, y: 0 };
+  lastPlayerPosition = { x: 0, y: 0 };
+  if (fadeFrameId !== null) {
+    cancelAnimationFrame(fadeFrameId);
+    fadeFrameId = null;
+  }
+  moveQueue.length = 0;
+  playerPoints = 0;
+  enemies = [];
+  scorePopups = [];
+  flyingCoins = [];
+  trail = [];
+  addTrailPoint(renderPlayer.x, renderPlayer.y);
+  gameWon = false;
+  isAnimatingMove = false;
   
-  progressBarEl.style.width = `${progressPercent}%`;
-  progressPercentEl.textContent = progressPercent;
-  progressBarEl.setAttribute("aria-valuenow", progressPercent);
+  let message = "Reach the exit!";
+  if (difficulty === "easy") {
+    message = "Easy Mode: Collect coins and reach the exit!";
+  } else if (difficulty === "hard") {
+    message = "Hard Mode: No moving backward!";
+  } else if (difficulty === "impossible") {
+    message = "Impossible Mode: Limited steps + no going back!";
+  }
+
+  statusEl.textContent = isTrollLevel && message.includes("Reach the exit!")
+    ? "TROLL LEVEL 25x25: collect smart, enemies are harsher."
+    : message;
+  hideWinPopup();
+  hideTrollPopup();
+  updateScoreLabel();
+  initMaze();
+  distancesFromStart = buildDistanceMap({ x: 0, y: 0 });
+  pickExit(distancesFromStart);
+  setupPathChallenges();
+  
+  // Calculate optimal path for impossible mode
+  if (difficulty === "impossible") {
+    optimalPathLength = calculateOptimalPath();
+  } else {
+    optimalPathLength = 0;
+  }
+  
+  updateProgressBar();
+  drawMaze();
+
+  if (isTrollLevel) {
+    scheduleTrollIdlePopup();
+  }
 }
 
 function showWinPopup() {
@@ -625,6 +806,31 @@ function showWinPopup() {
 function hideWinPopup() {
   winOverlayEl.setAttribute("aria-hidden", "true");
   winPopupEl.classList.remove("show");
+}
+
+function showWelcome() {
+  gameStarted = false;
+  welcomeOverlayEl.classList.remove("hidden");
+  welcomeOverlayEl.setAttribute("aria-hidden", "false");
+  // Reset progress bar
+  distanceToExit = Infinity;
+  maxDistanceToExit = Infinity;
+  updateProgressBar();
+}
+
+function hideWelcome() {
+  welcomeOverlayEl.classList.add("hidden");
+  welcomeOverlayEl.setAttribute("aria-hidden", "true");
+}
+
+function openThemeModal() {
+  themeModal.classList.remove("hidden");
+  themeModal.setAttribute("aria-hidden", "false");
+}
+
+function closeThemeModal() {
+  themeModal.classList.add("hidden");
+  themeModal.setAttribute("aria-hidden", "true");
 }
 
 function showTrollPopup() {
@@ -924,6 +1130,16 @@ function tryMove(dx, dy) {
 
   if (nx < 0 || nx >= gridSize || ny < 0 || ny >= gridSize) return restartOnWallHit();
 
+  // Check if movement is allowed in current difficulty
+  if (!canMoveTo(nx, ny)) {
+    if (difficulty === "hard" || difficulty === "impossible") {
+      statusEl.textContent = "You can't move backward!";
+    } else if (difficulty === "impossible" && stepCount >= optimalPathLength) {
+      statusEl.textContent = `Out of steps! Max was ${optimalPathLength}.`;
+    }
+    return;
+  }
+
   const enemy = findEnemyAt(nx, ny);
   if (enemy) {
     if (playerPoints <= enemy.hp) {
@@ -940,8 +1156,14 @@ function tryMove(dx, dy) {
   }
 
   const start = { x: player.x, y: player.y };
+  lastPlayerPosition = { x: player.x, y: player.y };
   player.x = nx;
   player.y = ny;
+  
+  // Track steps for impossible mode
+  if (difficulty === "impossible" || difficulty === "hard") {
+    stepCount++;
+  }
 
   // Update distance to exit for progress bar
   if (Number.isFinite(distancesFromStart[player.y][player.x])) {
@@ -1036,6 +1258,20 @@ function easeOutQuad(t) {
 function onKeyDown(event) {
   const key = event.key.toLowerCase();
 
+  // Check for Escape key to close theme modal
+  if (key === "escape" && !themeModal.classList.contains("hidden")) {
+    closeThemeModal();
+    event.preventDefault();
+    return;
+  }
+
+  // Check for 'm' key to start new game from welcome screen
+  if (key === "m" && !welcomeOverlayEl.classList.contains("hidden")) {
+    startNewGame();
+    event.preventDefault();
+    return;
+  }
+
   if (["arrowup", "arrowdown", "arrowleft", "arrowright", "w", "a", "s", "d"].includes(key)) {
     event.preventDefault();
     noteTrollActivity();
@@ -1124,58 +1360,234 @@ function getPlayerRgb() {
   return hexToRgb(getCssVar("--player"));
 }
 
+const themes = {
+  "laser-red": {
+    "--wall": "#ff2e2e",
+    "--exit": "#ff6b6b",
+    "--player": "#ff3b3b",
+    "--accent": "#ff1744",
+    "--bg": "#1a0b0b",
+    "--panel": "#2a1414",
+    "--ink": "#ffcccc",
+    "--path": "#0f0505",
+    "--trail-rgb": "255, 100, 100",
+    "--bg-glow-a": "rgba(120, 20, 20, 0.9)",
+    "--bg-glow-b": "rgba(70, 10, 10, 0.8)",
+    "--panel-glow": "rgba(255, 46, 99, 0.25)",
+    "--board-glow": "rgba(255, 46, 99, 0.22)",
+  },
+  "neon-yellow": {
+    "--wall": "#ffea00",
+    "--exit": "#ffd600",
+    "--player": "#ffeb3b",
+    "--accent": "#ffb300",
+    "--bg": "#1a1600",
+    "--panel": "#2a2410",
+    "--ink": "#fffacd",
+    "--path": "#0f0a00",
+    "--trail-rgb": "255, 230, 0",
+    "--bg-glow-a": "rgba(120, 100, 0, 0.88)",
+    "--bg-glow-b": "rgba(70, 55, 0, 0.8)",
+    "--panel-glow": "rgba(255, 214, 0, 0.24)",
+    "--board-glow": "rgba(255, 214, 0, 0.2)",
+  },
+  "electric-lime": {
+    "--wall": "#39ff14",
+    "--exit": "#7fff00",
+    "--player": "#76ff03",
+    "--accent": "#00ff00",
+    "--bg": "#0a1400",
+    "--panel": "#141f0a",
+    "--ink": "#e8ffcc",
+    "--path": "#050a00",
+    "--trail-rgb": "57, 255, 20",
+    "--bg-glow-a": "rgba(20, 90, 10, 0.88)",
+    "--bg-glow-b": "rgba(10, 50, 6, 0.8)",
+    "--panel-glow": "rgba(57, 255, 20, 0.24)",
+    "--board-glow": "rgba(57, 255, 20, 0.2)",
+  },
+  "cyber-cyan": {
+    "--wall": "#00e5ff",
+    "--exit": "#00bcd4",
+    "--player": "#00d4ff",
+    "--accent": "#00c2ff",
+    "--bg": "#070912",
+    "--panel": "#0b1020",
+    "--ink": "#d9f8ff",
+    "--path": "#05070f",
+    "--trail-rgb": "0, 255, 220",
+    "--bg-glow-a": "rgba(16, 39, 72, 0.9)",
+    "--bg-glow-b": "rgba(40, 15, 71, 0.75)",
+    "--panel-glow": "rgba(0, 194, 255, 0.25)",
+    "--board-glow": "rgba(0, 194, 255, 0.2)",
+  },
+  "hot-magenta": {
+    "--wall": "#ff00ff",
+    "--exit": "#ff1493",
+    "--player": "#ff0080",
+    "--accent": "#ff006e",
+    "--bg": "#1a0a1a",
+    "--panel": "#240d24",
+    "--ink": "#ffccff",
+    "--path": "#0f0410",
+    "--trail-rgb": "255, 50, 200",
+    "--bg-glow-a": "rgba(90, 20, 80, 0.88)",
+    "--bg-glow-b": "rgba(60, 10, 50, 0.8)",
+    "--panel-glow": "rgba(255, 0, 255, 0.24)",
+    "--board-glow": "rgba(255, 0, 255, 0.2)",
+  },
+  "plasma-orange": {
+    "--wall": "#ff8c00",
+    "--exit": "#ff6347",
+    "--player": "#ffa500",
+    "--accent": "#ff7f00",
+    "--bg": "#1a0f08",
+    "--panel": "#2a1810",
+    "--ink": "#ffd9b3",
+    "--path": "#0f0804",
+    "--trail-rgb": "255, 140, 0",
+    "--bg-glow-a": "rgba(110, 60, 10, 0.88)",
+    "--bg-glow-b": "rgba(70, 35, 10, 0.8)",
+    "--panel-glow": "rgba(255, 140, 0, 0.24)",
+    "--board-glow": "rgba(255, 140, 0, 0.2)",
+  },
+  "toxic-green": {
+    "--wall": "#00ff41",
+    "--exit": "#39ff14",
+    "--player": "#00ff00",
+    "--accent": "#00ff00",
+    "--bg": "#051205",
+    "--panel": "#0a1a0a",
+    "--ink": "#ccffcc",
+    "--path": "#020805",
+    "--trail-rgb": "0, 255, 65",
+    "--bg-glow-a": "rgba(0, 70, 30, 0.88)",
+    "--bg-glow-b": "rgba(0, 40, 18, 0.8)",
+    "--panel-glow": "rgba(0, 255, 65, 0.24)",
+    "--board-glow": "rgba(0, 255, 65, 0.2)",
+  },
+  "arctic-ice": {
+    "--wall": "#00f0ff",
+    "--exit": "#0ff0ff",
+    "--player": "#00ffff",
+    "--accent": "#00dddd",
+    "--bg": "#050a0f",
+    "--panel": "#0a1420",
+    "--ink": "#b3f0ff",
+    "--path": "#020508",
+    "--trail-rgb": "100, 240, 255",
+    "--bg-glow-a": "rgba(12, 70, 95, 0.88)",
+    "--bg-glow-b": "rgba(8, 38, 60, 0.8)",
+    "--panel-glow": "rgba(0, 240, 255, 0.24)",
+    "--board-glow": "rgba(0, 240, 255, 0.2)",
+  },
+  "sunset-fire": {
+    "--wall": "#ff4500",
+    "--exit": "#ff6347",
+    "--player": "#ff7f50",
+    "--accent": "#ff6347",
+    "--bg": "#1a0a00",
+    "--panel": "#2a1410",
+    "--ink": "#ffccb3",
+    "--path": "#0f0500",
+    "--trail-rgb": "255, 100, 50",
+    "--bg-glow-a": "rgba(110, 35, 10, 0.88)",
+    "--bg-glow-b": "rgba(70, 20, 8, 0.8)",
+    "--panel-glow": "rgba(255, 69, 0, 0.24)",
+    "--board-glow": "rgba(255, 69, 0, 0.2)",
+  },
+  "deep-purple": {
+    "--wall": "#9d4edd",
+    "--exit": "#bb86fc",
+    "--player": "#b39ddb",
+    "--accent": "#ab47bc",
+    "--bg": "#0f0a15",
+    "--panel": "#1a1428",
+    "--ink": "#e1bee7",
+    "--path": "#0a050f",
+    "--trail-rgb": "157, 78, 221",
+    "--bg-glow-a": "rgba(58, 24, 86, 0.88)",
+    "--bg-glow-b": "rgba(28, 14, 44, 0.8)",
+    "--panel-glow": "rgba(157, 78, 221, 0.24)",
+    "--board-glow": "rgba(157, 78, 221, 0.2)",
+  },
+  "rainbow": {
+    "--wall": "#ff0080",
+    "--exit": "#00ff00",
+    "--player": "#00ffff",
+    "--accent": "#ffff00",
+    "--bg": "#0a0a0a",
+    "--panel": "#1a1a1a",
+    "--ink": "#ffffff",
+    "--path": "#050505",
+    "--trail-rgb": "255, 100, 255",
+    "--bg-glow-a": "rgba(120, 0, 80, 0.9)",
+    "--bg-glow-b": "rgba(0, 120, 120, 0.82)",
+    "--panel-glow": "rgba(255, 255, 255, 0.24)",
+    "--board-glow": "rgba(255, 255, 255, 0.18)",
+  },
+};
+
+function applyTheme(themeName) {
+  const theme = themes[themeName];
+  if (!theme) return;
+  
+  currentTheme = themeName;
+  
+  // Remove rainbow mode class if it was active
+  document.body.classList.remove("rainbow-mode");
+  
+  // Add rainbow mode class if rainbow theme is selected
+  if (themeName === "rainbow") {
+    document.body.classList.add("rainbow-mode");
+  }
+  
+  for (const [varName, varValue] of Object.entries(theme)) {
+    document.documentElement.style.setProperty(varName, varValue);
+  }
+  
+  // Update active button styling
+  themeBtns.forEach(btn => {
+    if (btn.getAttribute("data-theme") === themeName) {
+      btn.classList.add("active");
+    } else {
+      btn.classList.remove("active");
+    }
+  });
+  
+  // Close modal after theme selection with smooth animation
+  setTimeout(() => {
+    closeThemeModal();
+  }, 100);
+  
+  drawMaze();
+}
+
 function setPlayerColor(hexColor) {
   document.documentElement.style.setProperty("--player", hexColor);
   drawMaze();
 }
 
 function startNewGame(message = "Reach the exit!") {
-  gridSize = Number(sizeSelect.value);
-  isTrollLevel = gridSize === 25;
-  document.body.classList.toggle("troll-mode", isTrollLevel);
-  if (isTrollLevel) {
-    startTrollAmbience();
-  } else {
-    stopTrollAmbience();
-    clearTrollIdlePopupTimer();
-  }
-  cellSize = canvas.width / gridSize;
-  player = { x: 0, y: 0 };
-  renderPlayer = { x: 0, y: 0 };
-  if (fadeFrameId !== null) {
-    cancelAnimationFrame(fadeFrameId);
-    fadeFrameId = null;
-  }
-  moveQueue.length = 0;
-  playerPoints = 0;
-  enemies = [];
-  scorePopups = [];
-  flyingCoins = [];
-  trail = [];
-  addTrailPoint(renderPlayer.x, renderPlayer.y);
-  gameWon = false;
-  isAnimatingMove = false;
-  statusEl.textContent = isTrollLevel && message === "Reach the exit!"
-    ? "TROLL LEVEL 25x25: collect smart, enemies are harsher."
-    : message;
-  hideWinPopup();
-  hideTrollPopup();
-  updateScoreLabel();
-
-  initMaze();
-  pickExit();
-  setupPathChallenges();
-  updateProgressBar();
-  drawMaze();
-
-  if (isTrollLevel) {
-    scheduleTrollIdlePopup();
-  }
+  // This function is deprecated - use startGameWithDifficulty instead
+  // Kept for backwards compatibility
+  startGameWithDifficulty(difficulty || "easy");
 }
 
-newGameBtn.addEventListener("click", startNewGame);
-sizeSelect.addEventListener("change", () => startNewGame());
-colorSelect.addEventListener("change", () => setPlayerColor(colorSelect.value));
+newGameBtn.addEventListener("click", () => showHomeMenu());
+sizeSelect.addEventListener("change", () => showHomeMenu());
+easyBtn.addEventListener("click", () => startGameWithDifficulty("easy"));
+hardBtn.addEventListener("click", () => startGameWithDifficulty("hard"));
+impossibleBtn.addEventListener("click", () => startGameWithDifficulty("impossible"));
+themeBtn.addEventListener("click", () => openThemeModal());
+themeModalClose.addEventListener("click", () => closeThemeModal());
+themeModalOverlay.addEventListener("click", () => closeThemeModal());
+themeBtns.forEach(btn => {
+  btn.addEventListener("click", () => {
+    const themeName = btn.getAttribute("data-theme");
+    applyTheme(themeName);
+  });
+});
 window.addEventListener("keydown", onKeyDown);
 canvas.addEventListener("touchstart", onTouchStart, { passive: false });
 canvas.addEventListener("touchmove", onTouchMove, { passive: false });
@@ -1184,5 +1596,5 @@ window.addEventListener("pointerdown", () => {
   if (isTrollLevel) startTrollAmbience();
 }, { once: false });
 
-setPlayerColor(colorSelect.value);
-startNewGame();
+applyTheme(currentTheme);
+showHomeMenu();
